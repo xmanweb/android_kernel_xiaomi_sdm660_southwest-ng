@@ -368,7 +368,14 @@ jobs:
           make O="$OUT_DIR" "${TOOLCHAIN_ARGS[@]}" vendor/xiaomi/sdm660_defconfig "$DEFCONFIG"
           
           # 动态通过 scripts/config 追加集成宏（如果二合一开关勾选开启）
-          CONFIG_ARGS=()
+          CONFIG_ARGS=(
+            -e PSTORE
+            -e PSTORE_CONSOLE
+            -e PSTORE_PMSG
+            -e PSTORE_RAM
+            -e PSTORE_COMPRESS
+            --set-str PSTORE_COMPRESS_DEFAULT "lzo"
+          )
           if [ "${{ env.RUN_KSU_SUSFS }}" = "true" ]; then
             CONFIG_ARGS+=(-e KSU -e THREAD_INFO_IN_TASK \
                           -e KSU_SUSFS -e KSU_SUSFS_SUS_PATH -e KSU_SUSFS_SUS_MOUNT \
@@ -381,6 +388,10 @@ jobs:
             ./scripts/config --file "$OUT_DIR/.config" "${CONFIG_ARGS[@]}"
             make O="$OUT_DIR" "${TOOLCHAIN_ARGS[@]}" olddefconfig
           fi
+          
+          echo "=== 🔎 检查当前即将参与编译的 .config 核心宏 ==="
+          grep -E "_KSU|_SUSFS|THREAD_INFO|PSTORE|BUILD_ARM64_DT_OVERLAY" "$OUT_DIR/.config" || true
+          echo "==============================================="
 
           # 开始多线程并行构建
           LOG_FILE="${{ github.workspace }}/build.log"
