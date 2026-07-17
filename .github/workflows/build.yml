@@ -375,6 +375,8 @@ jobs:
             -e PSTORE_RAM
             -e PSTORE_COMPRESS
             --set-str PSTORE_COMPRESS_DEFAULT "lzo"
+            -d QTEE_SHM_BRIDGE
+            --set-val RCU_CPU_STALL_TIMEOUT 60
           )
           if [ "${{ env.RUN_KSU_SUSFS }}" = "true" ]; then
             CONFIG_ARGS+=(-e KSU -e THREAD_INFO_IN_TASK \
