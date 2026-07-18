@@ -365,7 +365,7 @@ jobs:
           fi
 
           echo "=== 正在生成配置树: $DEFCONFIG | LTO 模式: $LTO_MODE ==="
-          make O="$OUT_DIR" "${TOOLCHAIN_ARGS[@]}" vendor/sdm660-perf_defconfig "$DEFCONFIG"
+          make O="$OUT_DIR" "${TOOLCHAIN_ARGS[@]}" vendor/xiaomi/sdm660_defconfig "$DEFCONFIG"
           
           # 动态通过 scripts/config 追加集成宏（如果二合一开关勾选开启）
           CONFIG_ARGS=(
