@@ -374,6 +374,10 @@ jobs:
             -e PSTORE_PMSG
             -e PSTORE_RAM
             -e PSTORE_COMPRESS
+            -e PSTORE_LZO_COMPRESS
+            -e PSTORE_LZO_COMPRESS_DEFAULT
+            -e SERIAL_MSM
+            -e SERIAL_MSM_CONSOLE
           )
           if [ "${{ env.RUN_KSU_SUSFS }}" = "true" ]; then
             CONFIG_ARGS+=(-e KSU -e THREAD_INFO_IN_TASK \
@@ -389,7 +393,7 @@ jobs:
           fi
           
           echo "=== 🔎 检查当前即将参与编译的 .config 核心宏 ==="
-          grep -E "_KSU|_SUSFS|THREAD_INFO|PSTORE|BUILD_ARM64_DT_OVERLAY" "$OUT_DIR/.config" || true
+          grep -E "_KSU|_SUSFS|THREAD_INFO|PSTORE|SERIAL|BUILD_ARM64_DT_OVERLAY" "$OUT_DIR/.config" || true
           echo "==============================================="
 
           # 开始多线程并行构建
