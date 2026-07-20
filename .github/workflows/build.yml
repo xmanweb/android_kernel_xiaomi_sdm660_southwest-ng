@@ -504,6 +504,14 @@ jobs:
             fi
           fi
           
+          if [ "${{ env.RUN_DROIDSPACES }}" = "true" ]; then
+            CONFIG_ARGS+=(\
+              -e NF_LOG_COMMON \
+              -e NF_LOG_IPV4 \
+              -e NF_LOG_IPV6 \
+            )              
+          fi
+          
           if [ ${#CONFIG_ARGS[@]} -gt 0 ]; then
             ./scripts/config --file "$OUT_DIR/.config" "${CONFIG_ARGS[@]}"
             make O="$OUT_DIR" "${TOOLCHAIN_ARGS[@]}" olddefconfig
