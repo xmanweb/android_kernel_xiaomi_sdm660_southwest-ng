@@ -408,6 +408,15 @@ jobs:
           START_TIME=$(date +%s)
           cd "$KERNEL_DIR"
 
+          # 配置临时全局用户，防止 git revert 因为缺少身份信息而报错
+          git config --local user.email "bot@example.com"
+          git config --local user.name "Kernel Bot"
+          
+          echo "[+] Reverting commit c5c8d3d to prevent nf-logger errors..."
+          # --no-edit 表示使用默认的 Revert Commit Message，不需要人工交互确认
+          git fetch --depth=20 origin c5c8d3dfde40fb740b16aad00ae82f7d7418c741
+          git revert --no-edit c5c8d3dfde40fb740b16aad00ae82f7d7418c741
+         
           LEGACY_DIR="drivers/media/platform/msm/camera_v2-legacy"
           if [ -d "$LEGACY_DIR" ]; then
             echo "[+] 🔍 开始对 camera_v2-legacy 目录树进行地毯式 Makefile 检索与拨乱反正..."
