@@ -61,7 +61,7 @@ on:
         description: '注入 Droidspaces & 容器化基础设施适配'
         required: true
         type: boolean
-        default: false
+        default: true
 
 env:
   KERNEL_DIR: ${{ github.workspace }}/kernel
@@ -78,7 +78,7 @@ env:
   # 外部开关与挂钩模式转环境变量
   RUN_KSU_SUSFS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_ksu_susfs || 'true' }}
   HOOK_TYPE: ${{ github.event.inputs.hook_type || 'inline_susfs' }}
-  RUN_DROIDSPACES: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_droidspaces || 'false' }}
+  RUN_DROIDSPACES: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_droidspaces || 'true' }}
 
 jobs:
   build:
@@ -352,7 +352,6 @@ jobs:
           DROID_PATCH_DIR="$PATCH_DIR/Patches/Droidspaces"
           TARGET_CONFIG="arch/arm64/configs/${{ github.event.inputs.defconfig || 'vendor/xiaomi/whyred.config' }}"
           
-          cat $DROID_PATCH_DIR/droidspaces.config >> "$TARGET_CONFIG"
           sed -i 's/CONFIG_ANDROID_PARANOID_NETWORK=y/CONFIG_ANDROID_PARANOID_NETWORK=n/g' "$TARGET_CONFIG"
           echo "CONFIG_ANDROID_PARANOID_NETWORK=n" >> "$TARGET_CONFIG"
           
@@ -476,10 +475,6 @@ jobs:
           
           # 根据 Hook 类型动态追写宏定义
           CONFIG_ARGS=(
-            -e PSTORE
-            -e PSTORE_CONSOLE
-            -e PSTORE_PMSG
-            -e PSTORE_RAM
             -e SERIAL_MSM
             -e SERIAL_MSM_CONSOLE            
             )
@@ -511,6 +506,11 @@ jobs:
           
           if [ ${#CONFIG_ARGS[@]} -gt 0 ]; then
             ./scripts/config --file "$OUT_DIR/.config" "${CONFIG_ARGS[@]}"
+            make O="$OUT_DIR" "${TOOLCHAIN_ARGS[@]}" olddefconfig
+          fi
+
+          if [ "${{ env.RUN_DROIDSPACES }}" = "true" ]; then
+            ./scripts/kconfig/merge_config.sh -O "$OUT_DIR" -m "$OUT_DIR/.config" $PATCH_DIR/Patches/Droidspaces/droidspaces.config
             make O="$OUT_DIR" "${TOOLCHAIN_ARGS[@]}" olddefconfig
           fi
 
