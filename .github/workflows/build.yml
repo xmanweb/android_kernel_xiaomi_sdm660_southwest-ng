@@ -350,11 +350,7 @@ jobs:
         run: |
           cd "$KERNEL_DIR"
           DROID_PATCH_DIR="$PATCH_DIR/Patches/Droidspaces"
-          TARGET_CONFIG="arch/arm64/configs/${{ github.event.inputs.defconfig || 'vendor/xiaomi/whyred.config' }}"
-          
-          sed -i 's/CONFIG_ANDROID_PARANOID_NETWORK=y/CONFIG_ANDROID_PARANOID_NETWORK=n/g' "$TARGET_CONFIG"
-          echo "CONFIG_ANDROID_PARANOID_NETWORK=n" >> "$TARGET_CONFIG"
-          
+                    
           if [ -f "net/netfilter/xt_qtaguid.c" ] && [ -f "$DROID_PATCH_DIR/fix_kernel_panic_in_xt_qtaguid.cocci" ]; then
             spatch --sp-file "$DROID_PATCH_DIR/fix_kernel_panic_in_xt_qtaguid.cocci" --in-place net/netfilter/xt_qtaguid.c
           fi
@@ -509,6 +505,7 @@ jobs:
               -e NF_LOG_COMMON \
               -e NF_LOG_IPV4 \
               -e NF_LOG_IPV6 \
+              -d ANDROID_PARANOID_NETWORK \
             )              
           fi
           
@@ -523,7 +520,7 @@ jobs:
           fi
 
           echo "=== 🔎 检查当前即将参与编译的 .config 核心宏 ==="
-          grep -E "KSU|SUSFS|THREAD_INFO|PSTORE|BUILD_ARM64_DT_OVERLAY|SERIAL" "$OUT_DIR/.config" || true
+          grep -E "KSU|SUSFS|SERIAL|NF_|NETFILTER|BRIDGE_NETFILTER|_NS|CGROUP|MEMCG|DEVTMPFS|FW_LOADER" "$OUT_DIR/.config" || true
           echo "==============================================="
 
           # 开始多线程并行构建
