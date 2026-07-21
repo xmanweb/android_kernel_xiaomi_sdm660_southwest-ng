@@ -530,6 +530,7 @@ jobs:
 
           echo "=== 🔎 检查当前即将参与编译的 .config 核心宏 ==="
           grep -E "KSU|SUSFS|SERIAL|NF_|NETFILTER|BRIDGE_NETFILTER|_NS|CGROUP|MEMCG|DEVTMPFS|FW_LOADER" "$OUT_DIR/.config" || true
+          cp $OUT_DIR/.config $OUT_DIR/${BASE_NAME}.config
           echo "==============================================="
 
           # 开始多线程并行构建
@@ -661,7 +662,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.meta.outputs.base_name }}-config
-          path: ${{ env.OUT_DIR }}/.config
+          path: ${{ env.OUT_DIR }}/${{ steps.meta.outputs.base_name }}.config
           if-no-files-found: warn
           retention-days: 14
 
