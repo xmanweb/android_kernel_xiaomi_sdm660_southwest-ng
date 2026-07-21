@@ -654,8 +654,18 @@ jobs:
           path: ${{ github.workspace }}/build.log
           if-no-files-found: warn
           retention-days: 14
+          
+      # 20. 上传最终配置
+      - name: 上传最终配置
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.meta.outputs.base_name }}-config
+          path: ${{ env.OUT_DIR }}/.config
+          if-no-files-found: warn
+          retention-days: 14
 
-      # 20. 在页面生成可视化构建摘要
+      # 21. 在页面生成可视化构建摘要
       - name: 写入编译摘要
         if: always()
         run: |
@@ -672,8 +682,4 @@ jobs:
             echo "| 挂钩选择 (Hook Type) | \`${{ env.HOOK_TYPE }}\` |"
             echo "| Droidspaces 状态 | **${{ env.RUN_DROIDSPACES == 'true' && '已注入' || '未启用' }}** |"
             echo "| 任务最终状态 | **${{ job.status }}** |"
-            echo ""
-            echo "### 已打包产物列表"
-            echo "- \`${{ steps.meta.outputs.base_name }}-With-DTB.zip\` (包含设备树，推荐初次刷入)"
-            echo "- \`${{ steps.meta.outputs.base_name }}-No-DTB.zip\` (剥离设备树，仅更新内核主体)"
           } >> "$GITHUB_STEP_SUMMARY"
