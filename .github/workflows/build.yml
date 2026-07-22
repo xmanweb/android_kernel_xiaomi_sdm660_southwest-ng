@@ -503,7 +503,6 @@ jobs:
           if [ "${{ env.RUN_DROIDSPACES }}" = "true" ]; then
             CONFIG_ARGS+=(\
               -e PSI \
-              -e USER_NS \
               -d ANDROID_PARANOID_NETWORK \
             )              
           fi
