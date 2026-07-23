@@ -48,7 +48,7 @@ on:
         description: '开启 ReSukiSU 功能模块'
         required: true
         type: boolean
-        default: false
+        default: true
       hook_type:
         description: '选择 ReSukiSU 挂钩类型 (二选一)'
         required: true
