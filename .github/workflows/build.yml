@@ -3,16 +3,16 @@ name: "Custom Kernel 4.19 for whyred"
 on:
   push:
     branches:
-      - main-dynamic
+      - main-dynamic-0.17.0
   workflow_dispatch:
     inputs:
       branch:
         description: '选择要编译的内核分支'
         required: true
-        default: 'main-dynamic'
+        default: 'main-dynamic-0.17.0'
         type: choice
         options:
-          - main-dynamic
+          - main-dynamic-0.17.0
           - main
       toolchain:
         description: '选择 Clang 工具链 / 编译器'
@@ -74,7 +74,7 @@ env:
   AOSP_CLANG_TAG: r547379
   AOSP_CLANG_URL: https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86
   # 动态分支计算
-  BUILD_BRANCH: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || 'main-dynamic' }}
+  BUILD_BRANCH: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || 'main-dynamic-0.17.0' }}
   # 外部开关与挂钩模式转环境变量
   RUN_KSU_SUSFS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_ksu_susfs || 'true' }}
   HOOK_TYPE: ${{ github.event.inputs.hook_type || 'inline_susfs' }}
