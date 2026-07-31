@@ -408,25 +408,6 @@ jobs:
           START_TIME=$(date +%s)
           cd "$KERNEL_DIR"
          
-          LEGACY_DIR="drivers/media/platform/msm/camera_v2-legacy"
-          if [ -d "$LEGACY_DIR" ]; then
-            echo "[+] 🔍 开始对 camera_v2-legacy 目录树进行地毯式 Makefile 检索与拨乱反正..."
-            find "$LEGACY_DIR" -type f -name "Makefile" -print0 | xargs -0 sed -i 's|-Idrivers/media/platform/msm/camera_v2|-Idrivers/media/platform/msm/camera_v2-legacy|g'
-            find "$LEGACY_DIR" -type f -name "Makefile" -print0 | xargs -0 sed -i 's|-Idrivers/|-I\$(srctree)/drivers/|g'
-            
-            echo "[+] 🎉 全家桶路径清洗完毕！抽查最终的 common/Makefile 内容验证："
-            if [ -f "$LEGACY_DIR/common/Makefile" ]; then
-              cat "$LEGACY_DIR/common/Makefile" | grep "ccflags-y"
-            fi
-          fi
-          
-          ISP_SOURCE="drivers/media/platform/msm/camera_v2-legacy/isp/msm_isp.c"
-          if [ -f "$ISP_SOURCE" ]; then
-            echo "[+] 🛠️ 正在修复 msm_isp.c 中的 vm_fault_t 函数签名历史冲突..."
-            sed -i 's/static int isp_vma_fault/static vm_fault_t isp_vma_fault/g' "$ISP_SOURCE"
-            echo "[+] ISP 驱动函数签名升级完成！"
-          fi
-         
           mkdir -p "$OUT_DIR"
 
           DEFCONFIG="${{ github.event.inputs.defconfig || 'vendor/xiaomi/whyred.config' }}"
