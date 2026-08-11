@@ -3,7 +3,7 @@ name: "Custom Kernel 4.19 for whyred"
 on:
   push:
     branches:
-      - main-dynamic-0.17.1
+      - main-dynamic-0.17.3
   workflow_dispatch:
     inputs:
       branch:
@@ -12,7 +12,7 @@ on:
         default: 'main-dynamic'
         type: choice
         options:
-          - main-dynamic-0.17.1
+          - main-dynamic-0.17.3
           - main
       toolchain:
         description: '选择 Clang 工具链 / 编译器'
