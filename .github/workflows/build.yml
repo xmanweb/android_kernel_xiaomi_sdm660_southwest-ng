@@ -74,7 +74,7 @@ env:
   AOSP_CLANG_TAG: r547379
   AOSP_CLANG_URL: https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86
   # 动态分支计算
-  BUILD_BRANCH: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || 'main-dynamic-0.17.1' }}
+  BUILD_BRANCH: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || 'main-dynamic-0.17.3' }}
   # 外部开关与挂钩模式转环境变量
   RUN_KSU_SUSFS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_ksu_susfs || 'true' }}
   HOOK_TYPE: ${{ github.event.inputs.hook_type || 'inline_susfs' }}
