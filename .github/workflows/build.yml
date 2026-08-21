@@ -197,7 +197,7 @@ jobs:
       - name: 克隆补丁仓库
         if: env.RUN_KSU_SUSFS == 'true' || env.RUN_DROIDSPACES == 'true'
         run: |
-          git clone --depth=1 https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd.git -b mainline "${{ env.PATCH_DIR }}"
+          git clone --depth=1 https://github.com/xmanweb/NonGKI_Kernel_Build_2nd.git -b mainline "${{ env.PATCH_DIR }}"
 
       # 6. 配置 ccache 编译缓存
       - name: 缓存 ccache 数据
@@ -486,6 +486,7 @@ jobs:
               -e PSI \
               -d ANDROID_PARANOID_NETWORK \
               -e USER_NS \
+              -d CGROUP_BPF \
             )              
           fi
           
