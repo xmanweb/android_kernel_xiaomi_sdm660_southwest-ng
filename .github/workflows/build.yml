@@ -485,6 +485,7 @@ jobs:
             CONFIG_ARGS+=(\
               -e PSI \
               -d ANDROID_PARANOID_NETWORK \
+              -e USER_NS \
             )              
           fi
           
