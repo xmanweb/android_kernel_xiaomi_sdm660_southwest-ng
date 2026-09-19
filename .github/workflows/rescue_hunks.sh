@@ -7,20 +7,16 @@
 
 set -e
 
-echo "🚀 [SusFS 4.19 Rescue Engine] Adjusting fs/namespace.c for 4.19 VFS context API..."
-
 NAMESPACE_FILE="fs/namespace.c"
 
 if [ -f "$NAMESPACE_FILE" ]; then
-    echo "[+] 正在修复 $NAMESPACE_FILE (针对 fs_context 架构的内核)..."
+    echo "[+] 正在修复 $NAMESPACE_FILE (针对 fs_context 架构补全头文件与 vfs_kern_mount)..."
 
-    # ---------------------------------------------------------------------
-    # 步骤 1：修复头文件与外部符号声明 (针对 Hunk #1 失败)
-    # ---------------------------------------------------------------------
-    if ! grep -q "CONFIG_KSU_SUSFS" "$NAMESPACE_FILE"; then
+    # 1. 强制补齐头文件 (检查 susfs.h 是否存在)
+    if ! grep -q "linux/susfs.h" "$NAMESPACE_FILE"; then
+        echo "  -> 正在注入头文件与 SusFS 外部变量声明..."
         awk '
         /#include "pnode.h"/ {
-            print $0
             print "#ifdef CONFIG_KSU_SUSFS"
             print "#include <linux/susfs.h>"
             print "#include <linux/susfs_def.h>"
@@ -34,30 +30,27 @@ if [ -f "$NAMESPACE_FILE" ]; then
             print "#endif"
             print "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
             print ""
-            next
         }
         { print $0 }
         ' "$NAMESPACE_FILE" > "${NAMESPACE_FILE}.tmp" && mv "${NAMESPACE_FILE}.tmp" "$NAMESPACE_FILE"
-        echo "  - 已注入缺失的头文件与 extern 声明"
     fi
 
-    # ---------------------------------------------------------------------
-    # 步骤 2：全量拦截并适配 fs_context 版的 vfs_kern_mount (针对 Hunk #6 失败)
-    # ---------------------------------------------------------------------
-    if ! grep -q "bypass_orig_flow" "$NAMESPACE_FILE"; then
+    # 2. 强制补齐 vfs_kern_mount 中的 SusFS 拦截 (检查 susfs_alloc_non_unshare_ksu_vfsmnt 是否存在)
+    if ! grep -q "susfs_alloc_non_unshare_ksu_vfsmnt" "$NAMESPACE_FILE"; then
+        echo "  -> 正在注入 vfs_kern_mount 挂载拦截..."
         awk '
         BEGIN {
             state = 0
         }
 
-        # 状态 0：捕获 vfs_kern_mount 入口
+        # 捕获 vfs_kern_mount 函数入口
         state == 0 && /struct vfsmount \*vfs_kern_mount\(/ {
             state = 1
             print $0
             next
         }
 
-        # 状态 1：寻找 fc = fs_context_for_mount 错误校验出口
+        # 在 fc = fs_context_for_mount 出错校验后注入拦截
         state == 1 && /fc = fs_context_for_mount/ {
             print $0
             while (getline > 0) {
@@ -83,7 +76,7 @@ if [ -f "$NAMESPACE_FILE" ]; then
             next
         }
 
-        # 状态 2：在 put_fs_context(fc); 下方注入跳转锚点与安全校验
+        # 在 put_fs_context(fc); 下方注入跳转锚点与安全校验
         state == 2 && /put_fs_context\(fc\);/ {
             print $0
             print "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
@@ -98,8 +91,9 @@ if [ -f "$NAMESPACE_FILE" ]; then
 
         { print $0 }
         ' "$NAMESPACE_FILE" > "${NAMESPACE_FILE}.tmp" && mv "${NAMESPACE_FILE}.tmp" "$NAMESPACE_FILE"
-        echo "  - 已通过状态机改写 vfs_kern_mount 适配成功！"
     fi
+
+    echo "[+] fs/namespace.c 头文件与核心函数全部修复完毕！"
 fi
 
 
@@ -107,26 +101,36 @@ fi
 # 2. 修复 fs/proc/cmdline.c (适配带有 IGNORE_SKIP_FLAG 的 4.19 树)
 # ---------------------------------------------------------------------
 CMDLINE_FILE="fs/proc/cmdline.c"
+
 if [ -f "$CMDLINE_FILE" ]; then
-echo "[+] Patching $CMDLINE_FILE..."
-    awk '
-    BEGIN { header_added = 0; in_func = 0; }
-    /static int cmdline_proc_show/ {
-        if (!header_added) {
-            print "#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG"
-            print "extern struct static_key_false susfs_is_fake_cmdline_or_bootconfig_buffer_set;"
-            print "extern void susfs_spoof_cmdline_or_bootconfig(struct seq_file *m);"
-            print "#endif"
-            print ""
-            header_added = 1
+    echo "[+] Patching $CMDLINE_FILE (Handling CONFIG_INITRAMFS_IGNORE_SKIP_FLAG)..."
+
+    # 检查是否已经注入过，防止重复执行
+    if ! grep -q "susfs_spoof_cmdline_or_bootconfig" "$CMDLINE_FILE"; then
+        awk '
+        BEGIN {
+            header_added = 0
+            in_func = 0
         }
-        in_func = 1
-        print $0
-        next
-    }
-    /^{/ {
-        print $0
-        if (in_func == 1) {
+
+        # 1. 在 static int cmdline_proc_show 函数上方精准注入 extern 声明
+        /static int cmdline_proc_show/ {
+            if (!header_added) {
+                print "#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG"
+                print "extern struct static_key_false susfs_is_fake_cmdline_or_bootconfig_buffer_set;"
+                print "extern void susfs_spoof_cmdline_or_bootconfig(struct seq_file *m);"
+                print "#endif"
+                print ""
+                header_added = 1
+            }
+            in_func = 1
+            print $0
+            next
+        }
+
+        # 2. 捕获函数的入口 '{'，在入口处最优先注入 SUSFS cmdline 伪装/劫持逻辑
+        /^{/ && in_func == 1 {
+            print $0
             print "#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG"
             print "\tif (static_branch_likely(&susfs_is_fake_cmdline_or_bootconfig_buffer_set)) {"
             print "\t\tsusfs_spoof_cmdline_or_bootconfig(m);"
@@ -134,15 +138,17 @@ echo "[+] Patching $CMDLINE_FILE..."
             print "\t\treturn 0;"
             print "\t}"
             print "#endif"
-            in_func = 0
+            in_func = 0  # 注入完成，关闭状态
+            next
         }
-        next
-    }
-    /^}/ { in_func = 0; }
-    { print }
-    ' "$CMDLINE_FILE" > "${CMDLINE_FILE}.tmp" && mv "${CMDLINE_FILE}.tmp" "$CMDLINE_FILE"
 
-    echo "[+] fs/proc/cmdline.c patched successfully."
+        { print $0 }
+        ' "$CMDLINE_FILE" > "${CMDLINE_FILE}.tmp" && mv "${CMDLINE_FILE}.tmp" "$CMDLINE_FILE"
+
+        echo "[+] $CMDLINE_FILE patched successfully!"
+    else
+        echo "[!] $CMDLINE_FILE has already been patched, skipping."
+    fi
 fi
 
 
