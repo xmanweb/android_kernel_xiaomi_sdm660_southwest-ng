@@ -152,27 +152,31 @@ fi
 
 SUPER_FILE="fs/super.c"
 if [ -f "$SUPER_FILE" ]; then
-echo "[+] Patching $SUPER_FILE..."
-    # 修复 Hunk #1 (头文件注入)
-    if ! grep -q "CONFIG_KSU_SUSFS" "$SUPER_FILE"; then
+    if grep -q "linux/susfs_def.h" "$SUPER_FILE"; then
+        echo "[=] $SUPER_FILE already has SusFS headers, skipping."
+    else
+        echo "[+] Injecting headers & declarations into $SUPER_FILE..."
         awk '
+        BEGIN { header_added = 0; }
         /#include "internal.h"/ {
-            print "#ifdef CONFIG_KSU_SUSFS"
-            print "#include <linux/susfs_def.h>"
-            print "#endif // #ifdef CONFIG_KSU_SUSFS"
-            print $0
-            print ""
-            print "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
-            print "extern bool susfs_is_current_ksu_domain(void);"
-            print "extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;"
-            print "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
-            next
+            if (!header_added) {
+                print "#ifdef CONFIG_KSU_SUSFS"
+                print "#include <linux/susfs_def.h>"
+                print "#endif // #ifdef CONFIG_KSU_SUSFS"
+                print $0
+                print ""
+                print "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
+                print "extern bool susfs_is_current_ksu_domain(void);"
+                print "extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;"
+                print "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
+                header_added = 1
+                next
+            }
         }
         { print }
         ' "$SUPER_FILE" > "${SUPER_FILE}.tmp" && mv "${SUPER_FILE}.tmp" "$SUPER_FILE"
+        echo "[+] $SUPER_FILE patched successfully."
     fi
-
-    echo "[+] fs/super.c patched successfully."
 fi
 
 
