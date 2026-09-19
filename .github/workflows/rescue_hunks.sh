@@ -10,11 +10,11 @@ set -e
 NAMESPACE_FILE="fs/namespace.c"
 
 if [ -f "$NAMESPACE_FILE" ]; then
-    echo "[+] 正在修复 $NAMESPACE_FILE (针对 fs_context 架构补全头文件与 vfs_kern_mount)..."
+    echo "[+] 正在针对 fs_context 架构修复 $NAMESPACE_FILE 中的 vfs_kern_mount..."
 
-    # 1. 强制补齐头文件 (检查 susfs.h 是否存在)
+    # 1. 头文件补全 (精准检查是否引入了 linux/susfs.h)
     if ! grep -q "linux/susfs.h" "$NAMESPACE_FILE"; then
-        echo "  -> 正在注入头文件与 SusFS 外部变量声明..."
+        echo "  -> [1/2] 正在注入头文件与 SusFS 声明..."
         awk '
         /#include "pnode.h"/ {
             print "#ifdef CONFIG_KSU_SUSFS"
@@ -35,32 +35,24 @@ if [ -f "$NAMESPACE_FILE" ]; then
         ' "$NAMESPACE_FILE" > "${NAMESPACE_FILE}.tmp" && mv "${NAMESPACE_FILE}.tmp" "$NAMESPACE_FILE"
     fi
 
-    # 2. 强制补齐 vfs_kern_mount 中的 SusFS 拦截 (检查 susfs_alloc_non_unshare_ksu_vfsmnt 是否存在)
-    if ! grep -q "susfs_alloc_non_unshare_ksu_vfsmnt" "$NAMESPACE_FILE"; then
-        echo "  -> 正在注入 vfs_kern_mount 挂载拦截..."
+    # 2. vfs_kern_mount 函数注入 (仅在 vfs_kern_mount 内部未发现 SUSFS 标记时才注入)
+    if ! awk '/vfs_kern_mount\(/, /^}/' "$NAMESPACE_FILE" | grep -q "CONFIG_KSU_SUSFS_SUS_MOUNT"; then
+        echo "  -> [2/2] 正在改写 vfs_kern_mount 逻辑..."
         awk '
         BEGIN {
-            state = 0
+            in_vfs_kern = 0
         }
 
-        # 捕获 vfs_kern_mount 函数入口
-        state == 0 && /struct vfsmount \*vfs_kern_mount\(/ {
-            state = 1
+        # 进入 vfs_kern_mount 函数
+        /struct vfsmount \*vfs_kern_mount\(/ {
+            in_vfs_kern = 1
             print $0
             next
         }
 
-        # 在 fc = fs_context_for_mount 出错校验后注入拦截
-        state == 1 && /fc = fs_context_for_mount/ {
+        # 匹配到 fc 出错校验出口，在其下方注入 SusFS 挂载拦截逻辑
+        in_vfs_kern == 1 && /return ERR_CAST\(fc\);/ {
             print $0
-            while (getline > 0) {
-                print $0
-                if ($0 ~ /return ERR_CAST\(fc\);/) {
-                    break
-                }
-            }
-            # 注入 SUSFS 挂载拦截逻辑
-            print ""
             print "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
             print "\tif (static_branch_unlikely(&susfs_is_sdcard_android_data_not_decrypted)) {"
             print "\t\tif (susfs_is_current_ksu_domain()) {"
@@ -71,29 +63,33 @@ if [ -f "$NAMESPACE_FILE" ]; then
             print "\t\t}"
             print "\t}"
             print "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
-            
-            state = 2
             next
         }
 
-        # 在 put_fs_context(fc); 下方注入跳转锚点与安全校验
-        state == 2 && /put_fs_context\(fc\);/ {
+        # 匹配到 put_fs_context(fc);，在下方注入跳转锚点与 NULL 保护
+        in_vfs_kern == 1 && /put_fs_context\(fc\);/ {
             print $0
             print "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
             print "bypass_orig_flow:"
             print "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
             print "\tif (!mnt)"
             print "\t\treturn ERR_PTR(-ENOMEM);"
-            
-            state = 3
+            next
+        }
+
+        # 离开 vfs_kern_mount 函数
+        in_vfs_kern == 1 && /^}/ {
+            in_vfs_kern = 0
+            print $0
             next
         }
 
         { print $0 }
         ' "$NAMESPACE_FILE" > "${NAMESPACE_FILE}.tmp" && mv "${NAMESPACE_FILE}.tmp" "$NAMESPACE_FILE"
+        echo "  [✓] vfs_kern_mount 改写成功！"
+    else
+        echo "  [!] vfs_kern_mount 已包含 SusFS 逻辑，跳过改写。"
     fi
-
-    echo "[+] fs/namespace.c 头文件与核心函数全部修复完毕！"
 fi
 
 
@@ -156,39 +152,71 @@ fi
 # 3. 修复 fs/proc/task_mmu.c (函数级状态机隔离，精准防误伤)
 # ---------------------------------------------------------------------
 TASK_MMU_FILE="fs/proc/task_mmu.c"
-if [ -f "$TASK_MMU_FILE" ]; then
-echo "[+] Patching $TASK_MMU_FILE..."
-    awk '
-    BEGIN { in_pagemap = 0; }
-    /static ssize_t pagemap_read/ { in_pagemap = 1; print $0; next; }
-    
-    # 兼容 4.19 down_read_killable 和 mmap_read_lock_killable
-    in_pagemap == 1 && (/down_read_killable/ || /mmap_read_lock_killable/) {
-        print $0
-        getline line2; print line2
-        getline line3; print line3
-        print "#ifdef CONFIG_KSU_SUSFS_SUS_MAP"
-        print "\t\tvma = find_vma(mm, start_vaddr);"
-        print "\t\tif (vma && vma->vm_file && SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))"
-        print "\t\t\tgoto bypass_orig_flow;"
-        print "#endif"
-        next
-    }
-    
-    in_pagemap == 1 && /walk_page_range/ {
-        print $0
-        print "#ifdef CONFIG_KSU_SUSFS_SUS_MAP"
-        print "bypass_orig_flow:"
-        print "#endif"
-        in_pagemap = 0
-        next
-    }
-    
-    /^}/ { in_pagemap = 0; }
-    { print }
-    ' "$TASK_MMU_FILE" > "${TASK_MMU_FILE}.tmp" && mv "${TASK_MMU_FILE}.tmp" "$TASK_MMU_FILE"
 
-    echo "[+] fs/proc/task_mmu.c patched successfully."
+if [ -f "$TASK_MMU_FILE" ]; then
+    echo "[+] Patching $TASK_MMU_FILE (Injecting SUSFS SUS_MAP pagemap_read hooks)..."
+
+    # 1. 补全局部变量定义 (struct vm_area_struct *vma;)
+    if ! grep -q "struct vm_area_struct \*vma;" "$TASK_MMU_FILE"; then
+        awk '
+        /static ssize_t pagemap_read\(struct file \*file/ {
+            in_pagemap = 1
+            print $0
+            next
+        }
+        in_pagemap == 1 && /int ret = 0, copied = 0;/ {
+            print $0
+            print "#ifdef CONFIG_KSU_SUSFS_SUS_MAP"
+            print "\tstruct vm_area_struct *vma;"
+            print "#endif"
+            in_pagemap = 0
+            next
+        }
+        { print $0 }
+        ' "$TASK_MMU_FILE" > "${TASK_MMU_FILE}.tmp" && mv "${TASK_MMU_FILE}.tmp" "$TASK_MMU_FILE"
+    fi
+
+    # 2. 注入 pagemap_read 核心拦截逻辑
+    if ! grep -q "bypass_orig_flow" "$TASK_MMU_FILE"; then
+        awk '
+        BEGIN { in_pagemap = 0; }
+
+        /static ssize_t pagemap_read\(struct file \*file/ {
+            in_pagemap = 1
+            print $0
+            next
+        }
+
+        # 匹配到锁解构后注入
+        in_pagemap == 1 && /ret = mmap_read_lock_killable\(mm\);/ {
+            print $0
+            getline; print $0 # if (ret)
+            getline; print $0 #     goto out_free;
+
+            print "#ifdef CONFIG_KSU_SUSFS_SUS_MAP"
+            print "\t\tvma = find_vma(mm, start_vaddr);"
+            print "\t\tif (vma && vma->vm_file && SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))"
+            print "\t\t\tgoto bypass_orig_flow;"
+            print "#endif"
+            next
+        }
+
+        in_pagemap == 1 && /ret = walk_page_range\(start_vaddr, end, &pagemap_walk\);/ {
+            print $0
+            print "#ifdef CONFIG_KSU_SUSFS_SUS_MAP"
+            print "bypass_orig_flow:"
+            print "#endif"
+            in_pagemap = 0 # 完成当前函数的改写
+            next
+        }
+
+        /^}/ { in_pagemap = 0; }
+
+        { print $0 }
+        ' "$TASK_MMU_FILE" > "${TASK_MMU_FILE}.tmp" && mv "${TASK_MMU_FILE}.tmp" "$TASK_MMU_FILE"
+    fi
+
+    echo "[+] $TASK_MMU_FILE patched successfully!"
 fi
 
 #---------------------------------------------------------------------
