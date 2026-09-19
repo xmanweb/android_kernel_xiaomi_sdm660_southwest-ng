@@ -154,16 +154,12 @@ fi
 TASK_MMU_FILE="fs/proc/task_mmu.c"
 
 if [ -f "$TASK_MMU_FILE" ]; then
-    echo "[+] Patching $TASK_MMU_FILE (Injecting SUSFS SUS_MAP pagemap_read hooks)..."
+    echo "[+] 正在修复 $TASK_MMU_FILE (pagemap_read Hook)..."
 
-    # 1. 补全局部变量定义 (struct vm_area_struct *vma;)
+    # 1. 确保 pagemap_read 函数内定义了 struct vm_area_struct *vma; 变量
     if ! grep -q "struct vm_area_struct \*vma;" "$TASK_MMU_FILE"; then
         awk '
-        /static ssize_t pagemap_read\(struct file \*file/ {
-            in_pagemap = 1
-            print $0
-            next
-        }
+        /static ssize_t pagemap_read\(struct file \*file/ { in_pagemap = 1; print $0; next }
         in_pagemap == 1 && /int ret = 0, copied = 0;/ {
             print $0
             print "#ifdef CONFIG_KSU_SUSFS_SUS_MAP"
@@ -176,47 +172,32 @@ if [ -f "$TASK_MMU_FILE" ]; then
         ' "$TASK_MMU_FILE" > "${TASK_MMU_FILE}.tmp" && mv "${TASK_MMU_FILE}.tmp" "$TASK_MMU_FILE"
     fi
 
-    # 2. 注入 pagemap_read 核心拦截逻辑
+    # 2. 以 walk_page_range 为唯一锚点注入拦截与跳转标签
     if ! grep -q "bypass_orig_flow" "$TASK_MMU_FILE"; then
         awk '
-        BEGIN { in_pagemap = 0; }
+        /static ssize_t pagemap_read\(struct file \*file/ { in_pagemap = 1; print $0; next }
 
-        /static ssize_t pagemap_read\(struct file \*file/ {
-            in_pagemap = 1
-            print $0
-            next
-        }
-
-        # 匹配到锁解构后注入
-        in_pagemap == 1 && /ret = mmap_read_lock_killable\(mm\);/ {
-            print $0
-            getline; print $0 # if (ret)
-            getline; print $0 #     goto out_free;
-
+        in_pagemap == 1 && /ret = walk_page_range\(start_vaddr, end, &pagemap_walk\);/ {
             print "#ifdef CONFIG_KSU_SUSFS_SUS_MAP"
             print "\t\tvma = find_vma(mm, start_vaddr);"
             print "\t\tif (vma && vma->vm_file && SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))"
             print "\t\t\tgoto bypass_orig_flow;"
             print "#endif"
-            next
-        }
-
-        in_pagemap == 1 && /ret = walk_page_range\(start_vaddr, end, &pagemap_walk\);/ {
-            print $0
+            
+            print $0 # 输出原有的 ret = walk_page_range(...)
+            
             print "#ifdef CONFIG_KSU_SUSFS_SUS_MAP"
             print "bypass_orig_flow:"
             print "#endif"
-            in_pagemap = 0 # 完成当前函数的改写
+            in_pagemap = 0
             next
         }
 
-        /^}/ { in_pagemap = 0; }
-
+        /^}/ { in_pagemap = 0 }
         { print $0 }
         ' "$TASK_MMU_FILE" > "${TASK_MMU_FILE}.tmp" && mv "${TASK_MMU_FILE}.tmp" "$TASK_MMU_FILE"
+        echo "  [✓] task_mmu.c pagemap_read 劫持逻辑注入成功！"
     fi
-
-    echo "[+] $TASK_MMU_FILE patched successfully!"
 fi
 
 #---------------------------------------------------------------------
