@@ -10,57 +10,96 @@ set -e
 echo "🚀 [SusFS 4.19 Rescue Engine] Adjusting fs/namespace.c for 4.19 VFS context API..."
 
 NAMESPACE_FILE="fs/namespace.c"
+
 if [ -f "$NAMESPACE_FILE" ]; then
-echo "[+] Patching $NAMESPACE_FILE..."
-    # 修复 Hunk #1 (头文件注入)
+    echo "[+] 正在修复 $NAMESPACE_FILE (针对 fs_context 架构的内核)..."
+
+    # ---------------------------------------------------------------------
+    # 步骤 1：修复头文件与外部符号声明 (针对 Hunk #1 失败)
+    # ---------------------------------------------------------------------
     if ! grep -q "CONFIG_KSU_SUSFS" "$NAMESPACE_FILE"; then
         awk '
-        /#include "internal.h"/ {
+        /#include "pnode.h"/ {
+            print $0
             print "#ifdef CONFIG_KSU_SUSFS"
+            print "#include <linux/susfs.h>"
             print "#include <linux/susfs_def.h>"
             print "#endif // #ifdef CONFIG_KSU_SUSFS"
-            print ""
-            print $0
             print ""
             print "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
             print "extern bool susfs_is_current_ksu_domain(void);"
             print "extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;"
-            print ""
+            print "#ifndef CL_COPY_MNT_NS"
             print "#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */"
+            print "#endif"
             print "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
+            print ""
             next
         }
-        { print }
+        { print $0 }
         ' "$NAMESPACE_FILE" > "${NAMESPACE_FILE}.tmp" && mv "${NAMESPACE_FILE}.tmp" "$NAMESPACE_FILE"
+        echo "  - 已注入缺失的头文件与 extern 声明"
     fi
 
-    # 修复 Hunk #6 (vfs_kern_mount 注入)
-    awk '
-    BEGIN { in_func = 0; injected = 0; }
-    /struct vfsmount \*vfs_kern_mount/ { in_func = 1; }
-    in_func == 1 && /mnt = alloc_vfsmnt\(name\);/ && injected == 0 {
-        print "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
-        print "\tif (static_branch_unlikely(&susfs_is_sdcard_android_data_not_decrypted)) {"
-        print "\t\tif (susfs_is_current_ksu_domain()) {"
-        print "\t\t\tmnt = susfs_alloc_non_unshare_ksu_vfsmnt(name ?:\"none\");"
-        print "\t\t\tgoto bypass_orig_flow;"
-        print "\t\t}"
-        print "\t}"
-        print "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
-        print ""
-        print $0
-        print ""
-        print "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
-        print "bypass_orig_flow:"
-        print "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
-        injected = 1
-        next
-    }
-    /^}/ { in_func = 0; }
-    { print }
-    ' "$NAMESPACE_FILE" > "${NAMESPACE_FILE}.tmp" && mv "${NAMESPACE_FILE}.tmp" "$NAMESPACE_FILE"
+    # ---------------------------------------------------------------------
+    # 步骤 2：全量拦截并适配 fs_context 版的 vfs_kern_mount (针对 Hunk #6 失败)
+    # ---------------------------------------------------------------------
+    if ! grep -q "bypass_orig_flow" "$NAMESPACE_FILE"; then
+        awk '
+        BEGIN {
+            state = 0
+        }
 
-    echo "[+] fs/namespace.c patched successfully."
+        # 状态 0：捕获 vfs_kern_mount 入口
+        state == 0 && /struct vfsmount \*vfs_kern_mount\(/ {
+            state = 1
+            print $0
+            next
+        }
+
+        # 状态 1：寻找 fc = fs_context_for_mount 错误校验出口
+        state == 1 && /fc = fs_context_for_mount/ {
+            print $0
+            while (getline > 0) {
+                print $0
+                if ($0 ~ /return ERR_CAST\(fc\);/) {
+                    break
+                }
+            }
+            # 注入 SUSFS 挂载拦截逻辑
+            print ""
+            print "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
+            print "\tif (static_branch_unlikely(&susfs_is_sdcard_android_data_not_decrypted)) {"
+            print "\t\tif (susfs_is_current_ksu_domain()) {"
+            print "\t\t\tstruct mount *ksu_mnt = susfs_alloc_non_unshare_ksu_vfsmnt(name ?:\"none\");"
+            print "\t\t\tmnt = ksu_mnt ? &ksu_mnt->mnt : NULL;"
+            print "\t\t\tput_fs_context(fc);"
+            print "\t\t\tgoto bypass_orig_flow;"
+            print "\t\t}"
+            print "\t}"
+            print "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
+            
+            state = 2
+            next
+        }
+
+        # 状态 2：在 put_fs_context(fc); 下方注入跳转锚点与安全校验
+        state == 2 && /put_fs_context\(fc\);/ {
+            print $0
+            print "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
+            print "bypass_orig_flow:"
+            print "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT"
+            print "\tif (!mnt)"
+            print "\t\treturn ERR_PTR(-ENOMEM);"
+            
+            state = 3
+            next
+        }
+
+        { print $0 }
+        ' "$NAMESPACE_FILE" > "${NAMESPACE_FILE}.tmp" && mv "${NAMESPACE_FILE}.tmp" "$NAMESPACE_FILE"
+        echo "  - 已通过状态机改写 vfs_kern_mount 适配成功！"
+    fi
 fi
 
 
