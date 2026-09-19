@@ -154,10 +154,11 @@ fi
 TASK_MMU_FILE="fs/proc/task_mmu.c"
 
 if [ -f "$TASK_MMU_FILE" ]; then
-    echo "[+] 正在修复 $TASK_MMU_FILE (pagemap_read Hook)..."
+    echo "[+] 正在精准修复 $TASK_MMU_FILE 中的 pagemap_read 函数..."
 
-    # 1. 确保 pagemap_read 函数内定义了 struct vm_area_struct *vma; 变量
-    if ! grep -q "struct vm_area_struct \*vma;" "$TASK_MMU_FILE"; then
+    # 1. 确保 pagemap_read 内部声明了 vma 变量
+    if ! awk '/pagemap_read\(/, /^}/' "$TASK_MMU_FILE" | grep -q "struct vm_area_struct \*vma;"; then
+        echo "  -> [1/2] 正在注入 vma 变量声明..."
         awk '
         /static ssize_t pagemap_read\(struct file \*file/ { in_pagemap = 1; print $0; next }
         in_pagemap == 1 && /int ret = 0, copied = 0;/ {
@@ -172,8 +173,9 @@ if [ -f "$TASK_MMU_FILE" ]; then
         ' "$TASK_MMU_FILE" > "${TASK_MMU_FILE}.tmp" && mv "${TASK_MMU_FILE}.tmp" "$TASK_MMU_FILE"
     fi
 
-    # 2. 以 walk_page_range 为唯一锚点注入拦截与跳转标签
-    if ! grep -q "bypass_orig_flow" "$TASK_MMU_FILE"; then
+    # 2. 限定在 pagemap_read 函数作用域内检查并注入 SusFS 逻辑
+    if ! awk '/pagemap_read\(/, /^}/' "$TASK_MMU_FILE" | grep -q "bypass_orig_flow"; then
+        echo "  -> [2/2] 正在注入 pagemap_read 核心拦截与标签..."
         awk '
         /static ssize_t pagemap_read\(struct file \*file/ { in_pagemap = 1; print $0; next }
 
@@ -184,7 +186,7 @@ if [ -f "$TASK_MMU_FILE" ]; then
             print "\t\t\tgoto bypass_orig_flow;"
             print "#endif"
             
-            print $0 # 输出原有的 ret = walk_page_range(...)
+            print $0 # 原样输出 ret = walk_page_range(...)
             
             print "#ifdef CONFIG_KSU_SUSFS_SUS_MAP"
             print "bypass_orig_flow:"
@@ -196,7 +198,9 @@ if [ -f "$TASK_MMU_FILE" ]; then
         /^}/ { in_pagemap = 0 }
         { print $0 }
         ' "$TASK_MMU_FILE" > "${TASK_MMU_FILE}.tmp" && mv "${TASK_MMU_FILE}.tmp" "$TASK_MMU_FILE"
-        echo "  [✓] task_mmu.c pagemap_read 劫持逻辑注入成功！"
+        echo "  [✓] task_mmu.c 的 pagemap_read 拦截注入成功！"
+    else
+        echo "  [!] pagemap_read 内部已包含 SusFS 逻辑，跳过注入。"
     fi
 fi
 
