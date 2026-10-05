@@ -17,12 +17,12 @@ on:
       toolchain:
         description: '选择 Clang 工具链 / 编译器'
         required: false
-        default: 'aosp'
+        default: 'zyc'
         type: choice
         options:
-          - aosp
-          - neutron
           - zyc
+          - neutron
+          - aosp
       defconfig:
         description: '所使用的 Defconfig 配置文件'
         required: false
@@ -361,7 +361,7 @@ jobs:
       # 11. 配置选定工具链到环境变量 PATH
       - name: 配置工具链环境变量 PATH
         run: |
-          TOOLCHAIN_CHOICE="${{ github.event.inputs.toolchain || 'aosp' }}"
+          TOOLCHAIN_CHOICE="${{ github.event.inputs.toolchain || 'zyc' }}"
           if [ "$TOOLCHAIN_CHOICE" = "neutron" ]; then
             echo "激活编译器: Neutron Clang"
             echo "$TC_NEUTRON_DIR/bin" >> "$GITHUB_PATH"
@@ -386,7 +386,7 @@ jobs:
           BRANCH_SAFE="${BRANCH_NAME//\//-}"
           
           DATE_STR=$(TZ='Asia/Shanghai' date +'%Y%m%d_%H%M')
-          TOOLCHAIN_LABEL="${{ github.event.inputs.toolchain || 'aosp' }}"
+          TOOLCHAIN_LABEL="${{ github.event.inputs.toolchain || 'zyc' }}"
           
           TRACK=""
           if [ "${{ env.RUN_KSU_SUSFS }}" = "true" ]; then
@@ -647,7 +647,7 @@ jobs:
             echo "| 项目 | 配置参数值 |"
             echo "|---|---|"
             echo "| 配置文件 (Defconfig) | \`${{ steps.build.outputs.defconfig }}\` |"
-            echo "| 所用工具链 (Toolchain) | \`${{ github.event.inputs.toolchain || 'aosp' }}\` |"
+            echo "| 所用工具链 (Toolchain) | \`${{ github.event.inputs.toolchain || 'zyc' }}\` |"
             echo "| LTO 优化模式 | \`${{ steps.build.outputs.lto_mode }}\` |"
             echo "| 实际编译耗时 | **${{ steps.build.outputs.duration_min }} 分 ${{ steps.build.outputs.duration_sec }} 秒** |"
             echo "| ReSukiSU 模块状态 | **${{ env.RUN_KSU_SUSFS == 'true' && '已启用' || '未启用' }}** |"
