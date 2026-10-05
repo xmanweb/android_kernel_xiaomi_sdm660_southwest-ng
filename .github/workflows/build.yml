@@ -145,12 +145,12 @@ jobs:
 
       # 5.2 Neutron Clang
       - name: 获取当前周数 (用于 Neutron/ZyC 缓存校验)
-        if: ${{ github.event.inputs.toolchain == 'neutron' || github.event.inputs.toolchain == 'zyc' }}
+        if: ${{ (github.event.inputs.toolchain || 'zyc') == 'neutron' || (github.event.inputs.toolchain || 'zyc') == 'zyc' }}
         id: get-date
         run: echo "date=$(date +'%Y-%U')" >> "$GITHUB_OUTPUT"
 
       - name: 缓存 Neutron Clang 工具链
-        if: ${{ github.event.inputs.toolchain == 'neutron' }}
+        if: ${{ (github.event.inputs.toolchain || 'zyc') == 'neutron' }}
         id: cache-neutron
         uses: actions/cache@v5
         with:
@@ -160,7 +160,7 @@ jobs:
             neutron-clang-
 
       - name: 下载 Neutron Clang 工具链
-        if: ${{ github.event.inputs.toolchain == 'neutron' && steps.cache-neutron.outputs.cache-hit != 'true' }}
+        if: ${{ (github.event.inputs.toolchain || 'zyc') == 'neutron' && steps.cache-neutron.outputs.cache-hit != 'true' }}
         run: |
           mkdir -p "$TC_NEUTRON_DIR"
           cd "$TC_NEUTRON_DIR"
@@ -170,7 +170,7 @@ jobs:
 
       # 5.3 ZyCromerZ Clang
       - name: 缓存 ZyC Clang 工具链
-        if: ${{ github.event.inputs.toolchain == 'zyc' }}
+        if: ${{ (github.event.inputs.toolchain || 'zyc') == 'zyc' }}
         id: cache-zyc
         uses: actions/cache@v5
         with:
@@ -180,7 +180,7 @@ jobs:
             zyc-clang-
 
       - name: 下载 ZyC Clang 工具链
-        if: ${{ github.event.inputs.toolchain == 'zyc' && steps.cache-zyc.outputs.cache-hit != 'true' }}
+        if: ${{ (github.event.inputs.toolchain || 'zyc') == 'zyc' && steps.cache-zyc.outputs.cache-hit != 'true' }}
         run: |
           mkdir -p "$TC_ZYC_DIR"
           echo "正在获取 ZyC Clang 最新下载链接..."
@@ -204,9 +204,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.ccache
-          key: ccache-${{ github.event.inputs.toolchain || 'aosp' }}-${{ github.event.inputs.defconfig }}-${{ github.run_id }}
+          key: ccache-${{ github.event.inputs.toolchain || 'zyc' }}-${{ github.event.inputs.defconfig }}-${{ github.run_id }}
           restore-keys: |
-            ccache-${{ github.event.inputs.toolchain || 'aosp' }}-${{ github.event.inputs.defconfig }}-
+            ccache-${{ github.event.inputs.toolchain || 'zyc' }}-${{ github.event.inputs.defconfig }}-
 
       - name: 初始化 ccache 设置
         run: |
