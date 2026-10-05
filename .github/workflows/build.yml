@@ -126,7 +126,7 @@ jobs:
       # 5. 工具链配置与缓存控制
       # 5.1 AOSP Clang
       - name: 缓存 AOSP Clang 工具链
-        if: ${{ (github.event.inputs.toolchain || 'aosp') == 'aosp' }}
+        if: ${{ (github.event.inputs.toolchain || 'zyc') == 'aosp' }}
         id: cache-aosp
         uses: actions/cache@v5
         with:
@@ -134,7 +134,7 @@ jobs:
           key: aosp-clang-${{ env.AOSP_CLANG_TAG }}
 
       - name: 下载 AOSP Clang 工具链
-        if: ${{ (github.event.inputs.toolchain || 'aosp') == 'aosp' && steps.cache-aosp.outputs.cache-hit != 'true' }}
+        if: ${{ (github.event.inputs.toolchain || 'zyc') == 'aosp' && steps.cache-aosp.outputs.cache-hit != 'true' }}
         run: |
           mkdir -p "$TC_AOSP_DIR"
           curl -L --fail \
