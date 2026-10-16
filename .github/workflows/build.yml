@@ -292,6 +292,10 @@ jobs:
             sed -i 's/static const struct file_operations sel_handle_status_ops/const struct file_operations sel_handle_status_ops/g' security/selinux/selinuxfs.c
             sed -i 's/static ssize_t (\*const write_op\[\])(struct file \*, char \*, size_t)/ssize_t (\*const write_op\[\])(struct file \*, char \*, size_t)/g' security/selinux/selinuxfs.c
           fi
+          if [ -f "security/selinux/ss/services.c" ]; then
+            sed -i 's/static void security_dump_masked_av/void security_dump_masked_av/g' security/selinux/ss/services.c
+            sed -i 's/static void context_struct_compute_av/void context_struct_compute_av/g' security/selinux/ss/services.c
+          fi
           echo "=================================================="
           echo "🔍 [inline_susfs 最终修改审计 - 代码 Diff]"
           echo "=================================================="
