@@ -121,7 +121,7 @@ jobs:
             bc bison flex libssl-dev libelf-dev \
             build-essential zip curl git python3 \
             python-is-python3 ccache llvm lld coccinelle \
-            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi libxml2
 
       # 5. 工具链配置与缓存控制
       # 5.1 AOSP Clang
