@@ -463,7 +463,7 @@ jobs:
           # 根据 Hook 类型动态追写宏定义
           CONFIG_ARGS=(
             -e SERIAL_MSM \
-            -e SERIAL_MSM_CONSOLE \          
+            -e SERIAL_MSM_CONSOLE          
             )
             
           if [ "${{ env.RUN_KSU_SUSFS }}" = "true" ]; then
@@ -476,7 +476,7 @@ jobs:
                 -e KSU_SUSFS -e KSU_SUSFS_SUS_PATH -e KSU_SUSFS_SUS_MOUNT \
                 -e KSU_SUSFS_SUS_KSTAT -e KSU_SUSFS_SPOOF_UNAME -e KSU_SUSFS_ENABLE_LOG \
                 -e KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS -e KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
-                -e KSU_SUSFS_OPEN_REDIRECT -e KSU_SUSFS_SUS_MAP -d KSU_TRACEPOINT_HOOK \
+                -e KSU_SUSFS_OPEN_REDIRECT -e KSU_SUSFS_SUS_MAP -d KSU_TRACEPOINT_HOOK 
               )
             else
               # 手动 Syscall 挂钩专用宏配置
@@ -486,7 +486,7 @@ jobs:
                 -d KSU_MANUAL_HOOK_AUTO_SETUID_HOOK \
                 -d KSU_MANUAL_HOOK_AUTO_INITRC_HOOK \
                 -d KSU_TRACEPOINT_HOOK \
-                -d KSU_SUSFS \
+                -d KSU_SUSFS 
               )
             fi
           fi
@@ -494,7 +494,7 @@ jobs:
           if [ "${{ env.RUN_DROIDSPACES }}" = "true" ]; then
             CONFIG_ARGS+=(\
               -e PSI \
-              -d SECURITYFS \
+              -d SECURITYFS 
             )              
           fi
           
